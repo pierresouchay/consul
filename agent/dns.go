@@ -723,9 +723,6 @@ func (d *DNSServer) trimTCPResponse(req, resp *dns.Msg) (trimmed bool) {
 	hasExtra := len(resp.Extra) > 0
 	// There is some overhead, 65535 does not work
 	maxSize := 65533 // 64k - 2 bytes
-	// In order to compute properly, we have to avoid compress first
-	compressed := resp.Compress
-	resp.Compress = false
 
 	// We avoid some function calls and allocations by only handling the
 	// extra data when necessary.
@@ -736,9 +733,9 @@ func (d *DNSServer) trimTCPResponse(req, resp *dns.Msg) (trimmed bool) {
 	// Beyond 2500 records, performance gets bad
 	// Limit the number of records at once, anyway, it won't fit in 64k
 	// For SRV Records, the max is around 500 records, for A, less than 2k
-	truncateAt := 2048
+	truncateAt := 4096
 	if req.Question[0].Qtype == dns.TypeSRV {
-		truncateAt = 640
+		truncateAt = 1024
 	}
 	if len(resp.Answer) > truncateAt {
 		resp.Answer = resp.Answer[:truncateAt]
@@ -762,8 +759,6 @@ func (d *DNSServer) trimTCPResponse(req, resp *dns.Msg) (trimmed bool) {
 			req.Question,
 			len(resp.Answer), originalNumRecords, resp.Len(), originalSize)
 	}
-	// Restore compression if any
-	resp.Compress = compressed
 	return truncated
 }
 
