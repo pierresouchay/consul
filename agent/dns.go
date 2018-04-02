@@ -755,6 +755,11 @@ func (d *DNSServer) trimTCPResponse(req, resp *dns.Msg) (trimmed bool) {
 		}
 	}
 	if truncated {
+		buf, err := resp.Pack()
+		if len(buf) != resp.Len() || err != nil {
+			d.logger.Printf("[DEBUG] err:= %s, dns: DIFF between resp.Len() := %d and len(buf) := %d for %v", err, resp.Len(), len(buf), resp)
+			panic("Bug in DNS lib")
+		}
 		d.logger.Printf("[DEBUG] dns: TCP answer to %v too large truncated recs:=%d/%d, size:=%d/%d",
 			req.Question,
 			len(resp.Answer), originalNumRecords, resp.Len(), originalSize)
