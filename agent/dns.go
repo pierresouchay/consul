@@ -717,6 +717,32 @@ func syncExtra(index map[string]dns.RR, resp *dns.Msg) {
 	resp.Extra = extra
 }
 
+func dnsBinaryTruncate(resp *dns.Msg, maxSize int, index map[string]dns.RR, hasExtra bool) int {
+	originalAnswser := resp.Answer
+	startIndex := 0
+	endIndex := len(resp.Answer)
+	for endIndex-startIndex > 1 {
+		median := startIndex + (endIndex-startIndex)/2
+
+		resp.Answer = originalAnswser[:median]
+		resp.Extra = originalAnswser[:median]
+		if hasExtra {
+			syncExtra(index, resp)
+		}
+		aLen := resp.Len()
+		if aLen <= maxSize {
+			if maxSize-aLen < 10 {
+				// We are good, increasing will go out of bounds
+				return median
+			}
+			startIndex = median
+		} else {
+			endIndex = median
+		}
+	}
+	return startIndex
+}
+
 // trimTCPResponse limit the MaximumSize of messages to 64k as it is the limit
 // of DNS responses
 func (d *DNSServer) trimTCPResponse(req, resp *dns.Msg) (trimmed bool) {
@@ -749,17 +775,13 @@ func (d *DNSServer) trimTCPResponse(req, resp *dns.Msg) (trimmed bool) {
 	// This enforces the given limit on 64k, the max limit for DNS messages
 	for len(resp.Answer) > 0 && resp.Len() > maxSize {
 		truncated = true
-		resp.Answer = resp.Answer[:len(resp.Answer)-1]
+		bestIndex := dnsBinaryTruncate(resp, maxSize, index, hasExtra)
+		resp.Answer = resp.Answer[:bestIndex]
 		if hasExtra {
 			syncExtra(index, resp)
 		}
 	}
 	if truncated {
-		buf, err := resp.Pack()
-		if len(buf) != resp.Len() || err != nil {
-			d.logger.Printf("[DEBUG] err:= %s, dns: DIFF between resp.Len() := %d and len(buf) := %d for %v", err, resp.Len(), len(buf), resp)
-			panic("Bug in DNS lib")
-		}
 		d.logger.Printf("[DEBUG] dns: TCP answer to %v too large truncated recs:=%d/%d, size:=%d/%d",
 			req.Question,
 			len(resp.Answer), originalNumRecords, resp.Len(), originalSize)
@@ -775,6 +797,7 @@ func trimUDPResponse(req, resp *dns.Msg, udpAnswerLimit int) (trimmed bool) {
 	numAnswers := len(resp.Answer)
 	hasExtra := len(resp.Extra) > 0
 	maxSize := defaultMaxUDPSize
+	truncated := false
 
 	// Update to the maximum edns size
 	if edns := req.IsEdns0(); edns != nil {
@@ -793,7 +816,9 @@ func trimUDPResponse(req, resp *dns.Msg, udpAnswerLimit int) (trimmed bool) {
 
 	// This cuts UDP responses to a useful but limited number of responses.
 	maxAnswers := lib.MinInt(maxUDPAnswerLimit, udpAnswerLimit)
+	compress := resp.Compress
 	if maxSize == defaultMaxUDPSize && numAnswers > maxAnswers {
+		resp.Compress = false
 		resp.Answer = resp.Answer[:maxAnswers]
 		if hasExtra {
 			syncExtra(index, resp)
@@ -806,17 +831,17 @@ func trimUDPResponse(req, resp *dns.Msg, udpAnswerLimit int) (trimmed bool) {
 	// that will not exceed 512 bytes uncompressed, which is more conservative and
 	// will allow our responses to be compliant even if some downstream server
 	// uncompresses them.
-	compress := resp.Compress
-	resp.Compress = false
 	for len(resp.Answer) > 0 && resp.Len() > maxSize {
-		resp.Answer = resp.Answer[:len(resp.Answer)-1]
+		bestIndex := dnsBinaryTruncate(resp, maxSize, index, hasExtra)
+		resp.Answer = resp.Answer[:bestIndex]
+		truncated = true
 		if hasExtra {
 			syncExtra(index, resp)
 		}
 	}
 	resp.Compress = compress
 
-	return len(resp.Answer) < numAnswers
+	return truncated
 }
 
 // trimDNSResponse will trim the response for UDP and TCP
