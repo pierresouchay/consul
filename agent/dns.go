@@ -831,7 +831,9 @@ func trimUDPResponse(req, resp *dns.Msg, udpAnswerLimit int) (trimmed bool) {
 	// that will not exceed 512 bytes uncompressed, which is more conservative and
 	// will allow our responses to be compliant even if some downstream server
 	// uncompresses them.
-	for len(resp.Answer) > 0 && resp.Len() > maxSize {
+	// Even when size is too big for one single record, try to send it anyway
+	// (usefull for 512 bytes messages)
+	for len(resp.Answer) > 1 && resp.Len() > maxSize {
 		bestIndex := dnsBinaryTruncate(resp, maxSize, index, hasExtra)
 		resp.Answer = resp.Answer[:bestIndex]
 		truncated = true
