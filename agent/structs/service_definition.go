@@ -10,6 +10,7 @@ type ServiceDefinition struct {
 	Port              int
 	Check             CheckType
 	Checks            CheckTypes
+	Weights           Weights
 	Token             string
 	EnableTagOverride bool
 }
@@ -22,6 +23,7 @@ func (s *ServiceDefinition) NodeService() *NodeService {
 		Address:           s.Address,
 		Meta:              s.Meta,
 		Port:              s.Port,
+		Weights:           &s.Weights,
 		EnableTagOverride: s.EnableTagOverride,
 	}
 	if ns.ID == "" && ns.Service != "" {

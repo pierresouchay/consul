@@ -1250,7 +1250,7 @@ func TestAgent_RegisterService_TranslateKeys(t *testing.T) {
 	a := NewTestAgent(t.Name(), "")
 	defer a.Shutdown()
 
-	json := `{"name":"test", "port":8000, "enable_tag_override": true, "meta": {"some": "meta"}}`
+	json := `{"name":"test", "port":8000, "enable_tag_override": true, "meta": {"some": "meta"}, "weights":{"passing": 16}}`
 	req, _ := http.NewRequest("PUT", "/v1/agent/service/register", strings.NewReader(json))
 
 	obj, err := a.srv.AgentRegisterService(nil, req)
@@ -1266,6 +1266,7 @@ func TestAgent_RegisterService_TranslateKeys(t *testing.T) {
 		Meta:              map[string]string{"some": "meta"},
 		Port:              8000,
 		EnableTagOverride: true,
+		Weights:           &structs.Weights{Passing: 16, Warning: 0},
 	}
 
 	if got, want := a.State.Service("test"), svc; !verify.Values(t, "", got, want) {

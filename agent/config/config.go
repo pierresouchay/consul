@@ -313,6 +313,12 @@ type Autopilot struct {
 	UpgradeVersionTag       *string `json:"upgrade_version_tag,omitempty" hcl:"upgrade_version_tag" mapstructure:"upgrade_version_tag"`
 }
 
+// ServiceWeights defines the registration of weights used in DNS for a Service
+type ServiceWeights struct {
+	Passing *int `json:"passing,omitempty" hcl:"passing" mapstructure:"passing"`
+	Warning *int `json:"warning,omitempty" hcl:"warning" mapstructure:"warning"`
+}
+
 type ServiceDefinition struct {
 	ID                *string           `json:"id,omitempty" hcl:"id" mapstructure:"id"`
 	Name              *string           `json:"name,omitempty" hcl:"name" mapstructure:"name"`
@@ -323,6 +329,7 @@ type ServiceDefinition struct {
 	Check             *CheckDefinition  `json:"check,omitempty" hcl:"check" mapstructure:"check"`
 	Checks            []CheckDefinition `json:"checks,omitempty" hcl:"checks" mapstructure:"checks"`
 	Token             *string           `json:"token,omitempty" hcl:"token" mapstructure:"token"`
+	Weights           *ServiceWeights   `json:"weights,omitempty" hcl:"weights" mapstructure:"weights"`
 	EnableTagOverride *bool             `json:"enable_tag_override,omitempty" hcl:"enable_tag_override" mapstructure:"enable_tag_override"`
 }
 

@@ -341,6 +341,17 @@ func ValidateMetadata(meta map[string]string, allowConsulPrefix bool) error {
 	return nil
 }
 
+// ValidateWeights checks the definition of DNS weight is valid
+func ValidateWeights(weights *Weights) error {
+	if weights.Passing < 1 {
+		return fmt.Errorf("Passing must be greater than 0")
+	}
+	if weights.Warning < 0 {
+		return fmt.Errorf("Warning must be greater of equal to 0")
+	}
+	return nil
+}
+
 // validateMetaPair checks that the given key/value pair is in a valid format
 func validateMetaPair(key, value string, allowConsulPrefix bool) error {
 	if key == "" {
@@ -391,6 +402,7 @@ type ServiceNode struct {
 	ServiceName              string
 	ServiceTags              []string
 	ServiceAddress           string
+	ServiceWeights           Weights
 	ServiceMeta              map[string]string
 	ServicePort              int
 	ServiceEnableTagOverride bool
@@ -419,6 +431,7 @@ func (s *ServiceNode) PartialClone() *ServiceNode {
 		ServiceAddress:           s.ServiceAddress,
 		ServicePort:              s.ServicePort,
 		ServiceMeta:              nsmeta,
+		ServiceWeights:           s.ServiceWeights,
 		ServiceEnableTagOverride: s.ServiceEnableTagOverride,
 		RaftIndex: RaftIndex{
 			CreateIndex: s.CreateIndex,
@@ -436,12 +449,19 @@ func (s *ServiceNode) ToNodeService() *NodeService {
 		Address:           s.ServiceAddress,
 		Port:              s.ServicePort,
 		Meta:              s.ServiceMeta,
+		Weights:           &s.ServiceWeights,
 		EnableTagOverride: s.ServiceEnableTagOverride,
 		RaftIndex: RaftIndex{
 			CreateIndex: s.CreateIndex,
 			ModifyIndex: s.ModifyIndex,
 		},
 	}
+}
+
+// Weights represent the weight used by DNS for a given status
+type Weights struct {
+	Passing int
+	Warning int
 }
 
 type ServiceNodes []*ServiceNode
@@ -454,6 +474,7 @@ type NodeService struct {
 	Address           string
 	Meta              map[string]string
 	Port              int
+	Weights           *Weights
 	EnableTagOverride bool
 
 	RaftIndex
@@ -469,6 +490,7 @@ func (s *NodeService) IsSame(other *NodeService) bool {
 		!reflect.DeepEqual(s.Tags, other.Tags) ||
 		s.Address != other.Address ||
 		s.Port != other.Port ||
+		!reflect.DeepEqual(s.Weights, other.Weights) ||
 		!reflect.DeepEqual(s.Meta, other.Meta) ||
 		s.EnableTagOverride != other.EnableTagOverride {
 		return false
@@ -479,6 +501,15 @@ func (s *NodeService) IsSame(other *NodeService) bool {
 
 // ToServiceNode converts the given node service to a service node.
 func (s *NodeService) ToServiceNode(node string) *ServiceNode {
+	theWeights := Weights{
+		Passing: 1,
+		Warning: 0,
+	}
+	if s.Weights != nil {
+		if err := ValidateWeights(s.Weights); err == nil {
+			theWeights = *s.Weights
+		}
+	}
 	return &ServiceNode{
 		// Skip ID, see ServiceNode definition.
 		Node: node,
@@ -490,6 +521,7 @@ func (s *NodeService) ToServiceNode(node string) *ServiceNode {
 		ServiceAddress:           s.Address,
 		ServicePort:              s.Port,
 		ServiceMeta:              s.Meta,
+		ServiceWeights:           theWeights,
 		ServiceEnableTagOverride: s.EnableTagOverride,
 		RaftIndex: RaftIndex{
 			CreateIndex: s.CreateIndex,

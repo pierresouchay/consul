@@ -155,7 +155,7 @@ func (s *HTTPServer) AgentServices(resp http.ResponseWriter, req *http.Request) 
 
 	// Use empty list instead of nil
 	for id, s := range services {
-		if s.Tags == nil || s.Meta == nil {
+		if s.Tags == nil || s.Meta == nil || s.Weights == nil {
 			clone := *s
 			if s.Tags == nil {
 				clone.Tags = make([]string, 0)
@@ -166,6 +166,11 @@ func (s *HTTPServer) AgentServices(resp http.ResponseWriter, req *http.Request) 
 				clone.Meta = make(map[string]string)
 			} else {
 				clone.Meta = s.Meta
+			}
+			if s.Weights == nil {
+				clone.Weights = &structs.Weights{Passing: 1, Warning: 0}
+			} else {
+				clone.Weights = s.Weights
 			}
 			services[id] = &clone
 		}

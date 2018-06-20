@@ -997,6 +997,19 @@ func (b *Builder) serviceVal(v *ServiceDefinition) *structs.ServiceDefinition {
 	} else {
 		meta = v.Meta
 	}
+	serviceWeights := structs.Weights{Passing: 1, Warning: 0}
+	if v.Weights != nil {
+		if v.Weights.Passing != nil {
+			serviceWeights.Passing = *v.Weights.Passing
+		}
+		if v.Weights.Warning != nil {
+			serviceWeights.Warning = *v.Weights.Warning
+		}
+	}
+
+	if err := structs.ValidateWeights(&serviceWeights); err != nil {
+		b.err = multierror.Append(fmt.Errorf("Invalid weight definition for service %s: %s", b.stringVal(v.Name), err))
+	}
 	return &structs.ServiceDefinition{
 		ID:                b.stringVal(v.ID),
 		Name:              b.stringVal(v.Name),
@@ -1006,6 +1019,7 @@ func (b *Builder) serviceVal(v *ServiceDefinition) *structs.ServiceDefinition {
 		Port:              b.intVal(v.Port),
 		Token:             b.stringVal(v.Token),
 		EnableTagOverride: b.boolVal(v.EnableTagOverride),
+		Weights:           serviceWeights,
 		Checks:            checks,
 	}
 }
