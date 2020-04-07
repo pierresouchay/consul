@@ -8,6 +8,8 @@ replace github.com/hashicorp/consul/sdk => ./sdk
 
 replace launchpad.net/gocheck => github.com/go-check/check v0.0.0-20140225173054-eb6ee6f84d0a
 
+replace github.com/hashicorp/go-connlimit => github.com/pierresouchay/go-connlimit v0.2.2-0.20200403163944-7d35472dc224
+
 require (
 	github.com/Azure/go-autorest v10.15.3+incompatible // indirect
 	github.com/Microsoft/go-winio v0.4.3 // indirect
