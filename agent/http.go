@@ -28,6 +28,7 @@ import (
 	"github.com/hashicorp/consul/lib"
 	"github.com/hashicorp/consul/logging"
 	"github.com/hashicorp/go-cleanhttp"
+	"github.com/hashicorp/go-connlimit"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pkg/errors"
 )
@@ -82,9 +83,10 @@ func (e ForbiddenError) Error() string {
 // HTTPServer provides an HTTP api for an agent.
 type HTTPServer struct {
 	*http.Server
-	ln        net.Listener
-	agent     *Agent
-	blacklist *Blacklist
+	ln               net.Listener
+	agent            *Agent
+	blacklist        *Blacklist
+	blacklistedConns map[string]bool
 
 	// proto is filled by the agent to "http" or "https".
 	proto string
@@ -225,9 +227,31 @@ func (w *wrappedMux) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	w.handler.ServeHTTP(resp, req)
 }
 
+// MarkTooManyRequests mark connection to return HTTP 429.
+func (s *HTTPServer) MarkTooManyRequests(err error, conn net.Conn) {
+	if err == connlimit.ErrPerClientIPLimitReached {
+		ipPort := conn.RemoteAddr().String()
+		s.blacklistedConns[ipPort] = true
+		go func() {
+			message := "Your IP is issuing too many concurrent connections, please rate limit your calls\n"
+			tooManyRequestsResponse := []byte(fmt.Sprintf("HTTP/1.1 429 Too Many Requests\r\n"+
+				"Content-Type: text/plain\r\n"+
+				"Content-Length: %d\r\n"+
+				"Connection: close\r\n\r\n%s", len(message), message))
+			select {
+			case <-time.After(500 * time.Millisecond):
+				defer conn.Close()
+				delete(s.blacklistedConns, ipPort)
+				conn.Write(tooManyRequestsResponse)
+			}
+		}()
+	}
+}
+
 // handler is used to attach our handlers to the mux
 func (s *HTTPServer) handler(enableDebug bool) http.Handler {
 	mux := http.NewServeMux()
+	s.blacklistedConns = make(map[string]bool)
 
 	// handleFuncMetrics takes the given pattern and handler and wraps to produce
 	// metrics based on the pattern and request.
@@ -259,7 +283,18 @@ func (s *HTTPServer) handler(enableDebug bool) http.Handler {
 
 		gzipWrapper, _ := gziphandler.GzipHandlerWithOpts(gziphandler.MinSize(0))
 		gzipHandler := gzipWrapper(http.HandlerFunc(wrapper))
-		mux.Handle(pattern, gzipHandler)
+		tooManyConnectionsHandler := http.HandlerFunc(func(resp http.ResponseWriter, req *http.Request) {
+			if s.blacklistedConns[req.RemoteAddr] {
+				defer delete(s.blacklistedConns, req.RemoteAddr)
+				resp.Header().Add("Content-Type", "text/plain")
+				resp.Header().Add("Connection", "close")
+				resp.WriteHeader(http.StatusTooManyRequests)
+				http.Error(resp, http.StatusText(429), http.StatusTooManyRequests)
+				return
+			}
+			gzipHandler.ServeHTTP(resp, req)
+		})
+		mux.Handle(pattern, tooManyConnectionsHandler)
 	}
 
 	// handlePProf takes the given pattern and pprof handler

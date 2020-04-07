@@ -901,7 +901,12 @@ func (a *Agent) listenHTTP() ([]*HTTPServer, error) {
 			srv.Server.Handler = srv.handler(a.config.EnableDebug)
 
 			// Load the connlimit helper into the server
-			connLimitFn := a.httpConnLimiter.HTTPConnStateFunc()
+			handle429Mark := func() func(error, net.Conn) {
+				return func(err error, conn net.Conn) {
+					srv.MarkTooManyRequests(err, conn)
+				}
+			}
+			connLimitFn := a.httpConnLimiter.HTTPConnStateFuncWithErrorHandler(handle429Mark())
 
 			if proto == "https" {
 				// Enforce TLS handshake timeout
