@@ -33,7 +33,10 @@ import (
 )
 
 // UnmodifiedCachedDataResponseHeader is a header of Consul to specify data does not need any refresh
-const UnmodifiedCachedDataResponseHeader = "X-Consul-NotModified"
+const (
+	UnmodifiedCachedDataResponseHeader = "X-Consul-NotModified"
+	AllowNotModifiedHeader             = "X-Allow-NotModified"
+)
 
 // MethodNotAllowedError should be returned by a handler when the HTTP method is not allowed.
 type MethodNotAllowedError struct {
@@ -889,7 +892,7 @@ func parseCacheControl(resp http.ResponseWriter, req *http.Request, b structs.Qu
 func (s *HTTPServer) parseConsistency(resp http.ResponseWriter, req *http.Request, b structs.QueryOptionsCompat) bool {
 	query := req.URL.Query()
 	defaults := true
-	if req.Header.Get("X-Consul-Allow-NotModified") == "true" {
+	if req.Header.Get(AllowNotModifiedHeader) == "true" {
 		b.SetAllowNotModifiedResponse(true)
 	}
 	if _, ok := query["stale"]; ok {
